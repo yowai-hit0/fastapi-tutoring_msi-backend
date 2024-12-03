@@ -17,7 +17,6 @@ db = SessionLocal()
 fake = faker.Faker()
 
 
-
 # Function to add a user
 def add_user(username: str, email: str, password: str, bio: str):
     user = User(username=username, email=email)
@@ -74,6 +73,7 @@ def generate_large_dummy_data(num_users=1000, num_students=5000, num_sessions=20
         add_tutoring_session(tutor_id, student_id, date, duration, topic)
 
     print(f"Added {num_users} users, {num_users} tutors, {num_students} students, and {num_sessions} tutoring sessions.")
+
 
 # Example of adding large amounts of data
 generate_large_dummy_data(num_users=20000, num_students=500000, num_sessions=500000)
