@@ -11,7 +11,6 @@ from passlib.context import CryptContext
 from typing import List
 
 
-# Base class for SQLAlchemy models
 Base = declarative_base()
 DATABASE_URL = "postgresql://postgres:gomgom1029@localhost:5432/tutoring_db"
 engine = create_engine(DATABASE_URL)
@@ -23,8 +22,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(100), unique=True, index=True)
-    email = Column(String(100), unique=True, index=True)
+    username = Column(String(100), unique=False, index=True)
+    email = Column(String(100), unique=False, index=True)
     hashed_password = Column(String)
     tutor = relationship("Tutor", uselist=False, back_populates="user")
 
@@ -47,10 +46,10 @@ class Tutor(Base):
 
 class Student(Base):
     __tablename__ = 'students'
-    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, primary_key=True, index=True)
     tutor_id = Column(Integer, ForeignKey('tutors.id'))
     name = Column(String(100))
-    email = Column(String(100), unique=True, index=True)
+    email = Column(String(100), unique=False, index=True)
     age = Column(Integer, nullable=True)
     tutor = relationship("Tutor", back_populates="students")
     sessions = relationship("TutoringSession", back_populates="student")
@@ -60,9 +59,9 @@ class TutoringSession(Base):
     __tablename__ = 'tutoring_sessions'
     id = Column(Integer, primary_key=True, index=True)
     tutor_id = Column(Integer, ForeignKey('tutors.id'))
-    student_id = Column(Integer, ForeignKey('students.id'))
-    date = Column(DateTime)  # Changed to DateTime for proper date handling
-    duration = Column(Integer)  # Duration in minutes
+    student_id = Column(Integer, ForeignKey('students.student_id'))
+    date = Column(DateTime)
+    duration = Column(Integer)
     topic = Column(String(200))
     tutor = relationship("Tutor", back_populates="sessions")
     student = relationship("Student", back_populates="sessions")
@@ -119,7 +118,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-# Pydantic models
+# Schemas
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
@@ -157,7 +156,7 @@ class SessionResponse(BaseModel):
         orm_mode = True
 
 
-# User registration and login
+# Auth apis
 @app.post("/register/")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter((User.username == user.username) | (User.email == user.email)).first():
@@ -187,7 +186,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
-# CRUD routes for Students and Sessions follow
+# CRUD for Students and Sessions
 @app.post("/students/", response_model=StudentResponse)
 def create_student(student: StudentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     tutor = db.query(Tutor).filter(Tutor.user_id == current_user.id).first()
@@ -218,6 +217,25 @@ def get_students(db: Session = Depends(get_db), current_user: User = Depends(get
         )
     return tutor.students
 
+
+@app.get("/students/unprotected/", response_model=List[StudentResponse])
+def get_students(db: Session = Depends(get_db)):
+    students = db.query(Student)
+    if not students:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tutor not found for the current user"
+        )
+    return students
+@app.get("/sessions/unprotected", response_model=List[SessionResponse])
+def get_sessions(db: Session = Depends(get_db)):
+    my_session = db.query(TutoringSession)
+    if not my_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tutor not found for the current user"
+        )
+    return my_session
 
 @app.put("/students/{student_id}/", response_model=StudentResponse)
 def update_student(student_id: int, student: StudentCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -284,6 +302,8 @@ def get_sessions(db: Session = Depends(get_db), current_user: User = Depends(get
             detail="Tutor not found for the current user"
         )
     return tutor.sessions
+
+
 
 
 @app.put("/sessions/{session_id}/", response_model=SessionResponse)
